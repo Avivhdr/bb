@@ -479,8 +479,38 @@ function microphoneOrigin(url: string): string | null {
   }
 }
 
-function isAllowedBrowserPermission(permission: string): boolean {
-  return permission === "clipboard-sanitized-write";
+const LOCAL_NETWORK_PERMISSIONS: ReadonlySet<string> = new Set([
+  "local-network-access",
+  "local-network",
+  "loopback-network",
+]);
+const OKTA_DOMAINS = [
+  "okta.com",
+  "oktapreview.com",
+  "okta-emea.com",
+  "okta-gov.com",
+];
+
+function isOktaOrigin(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === "https:" &&
+      OKTA_DOMAINS.some((domain) => parsed.hostname.endsWith(`.${domain}`))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedBrowserPermission(
+  permission: string,
+  requestingUrl: string,
+): boolean {
+  return (
+    permission === "clipboard-sanitized-write" ||
+    (LOCAL_NETWORK_PERMISSIONS.has(permission) && isOktaOrigin(requestingUrl))
+  );
 }
 
 export function createDesktopBrowserViewManager(
@@ -815,7 +845,9 @@ export function createDesktopBrowserViewManager(
     browserSession.setPermissionRequestHandler(
       (wc, permission, callback, details) => {
         if (permission !== "media") {
-          callback(isAllowedBrowserPermission(permission));
+          callback(
+            isAllowedBrowserPermission(permission, details.requestingUrl),
+          );
           return;
         }
         const origin = microphoneOrigin(details.requestingUrl);
@@ -861,7 +893,7 @@ export function createDesktopBrowserViewManager(
     );
     browserSession.setPermissionCheckHandler(
       (wc, permission, requestingOrigin, details) =>
-        isAllowedBrowserPermission(permission) ||
+        isAllowedBrowserPermission(permission, requestingOrigin) ||
         (permission === "media" &&
           wc !== null &&
           !wc.isDestroyed() &&

@@ -4501,58 +4501,48 @@ describe("DesktopBrowserViewManager", () => {
     },
   );
 
-  it("allows clipboard-sanitized-write but denies clipboard-read and device permissions", () => {
-    const manager = createDesktopBrowserViewManager({
-      partition: "persist:test",
-    });
-    const hostWindow = new FakeHostWindow({
-      contentBounds: { width: 700, height: 450 },
-      webContentsId: 74,
-    });
-    attachBrowserTab({
-      manager,
-      hostWindow,
-      tabId: "browser:a",
-      url: "https://example.com/",
-    });
+  it.each([
+    ["clipboard-sanitized-write", "https://example.com/", true],
+    ["clipboard-read", "https://example.com/", false],
+    ["media", "https://example.com/", false],
+    ["notifications", "https://example.com/", false],
+    ["geolocation", "https://example.com/", false],
+    ["local-network-access", "https://acme.okta.com/", true],
+    ["local-network", "https://acme.oktapreview.com/", true],
+    ["loopback-network", "https://acme.okta-emea.com/", true],
+    ["local-network-access", "https://acme.okta-gov.com/", true],
+    ["local-network-access", "https://example.com/", false],
+    ["loopback-network", "https://example.com/", false],
+    ["local-network-access", "http://acme.okta.com/", false],
+    ["local-network-access", "https://okta.com.evil.example/", false],
+    ["local-network-access", "https://evilokta.com/", false],
+    ["geolocation", "https://acme.okta.com/", false],
+  ] as const)(
+    "grants %s to %s: %s",
+    async (permission, url, expected) => {
+      const manager = createDesktopBrowserViewManager({
+        partition: "persist:test",
+      });
+      const hostWindow = new FakeHostWindow({
+        contentBounds: { width: 700, height: 450 },
+        webContentsId: 74,
+      });
+      attachBrowserTab({ manager, hostWindow, tabId: "browser:a", url });
+      const browserSession = electronMock.fakeSessions.at(-1)!;
+      const check = browserSession.permissionCheckHandler!;
+      const request = browserSession.permissionRequestHandler!;
 
-    const fakeSession = electronMock.fakeSessions.at(-1);
-    expect(fakeSession).toBeDefined();
-    if (fakeSession === undefined) {
-      throw new Error("Expected a browser session to be created.");
-    }
-    const checkHandler = fakeSession.permissionCheckHandler;
-    const requestHandler = fakeSession.permissionRequestHandler;
-    expect(checkHandler).not.toBeNull();
-    expect(requestHandler).not.toBeNull();
-    if (checkHandler === null || requestHandler === null) {
-      throw new Error("Expected permission handlers to be registered.");
-    }
-
-    const permissions = [
-      "clipboard-sanitized-write",
-      "clipboard-read",
-      "media",
-      "notifications",
-      "geolocation",
-    ];
-    expect(
-      permissions.map((permission) => checkHandler(null, permission)),
-    ).toEqual([true, false, false, false, false]);
-
-    const requestGrants: boolean[] = [];
-    for (const permission of permissions) {
-      requestHandler(
-        requireFakeView(0).webContents,
-        permission,
-        (granted) => {
-          requestGrants.push(granted);
-        },
-        { requestingUrl: "https://example.com/", isMainFrame: true },
-      );
-    }
-    expect(requestGrants).toEqual([true, false, false, false, false]);
-  });
+      expect(check(null, permission, new URL(url).origin)).toBe(expected);
+      expect(
+        await new Promise<boolean>((resolve) =>
+          request(requireFakeView(0).webContents, permission, resolve, {
+            requestingUrl: url,
+            isMainFrame: true,
+          }),
+        ),
+      ).toBe(expected);
+    },
+  );
 });
 describe("hidden browser retention", () => {
   const SWEEP_MS = 30_000;
