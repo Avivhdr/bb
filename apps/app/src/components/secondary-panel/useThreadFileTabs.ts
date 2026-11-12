@@ -689,6 +689,24 @@ export function useThreadFileTabs({
     [updateFixedPanelTabsState],
   );
 
+  const renamePluginPanelTab = useCallback(
+    ({ tabId, title }: { tabId: string; title: string }) => {
+      const trimmed = title.trim();
+      if (trimmed.length === 0) return;
+      updateFixedPanelTabsState((state) => {
+        const tab = findSecondaryPanelTab(state.secondary.tabs, tabId);
+        if (!tab || tab.kind !== "plugin-panel" || tab.title === trimmed) {
+          return state;
+        }
+        return updateSecondaryPanelTabInState({
+          state,
+          tab: { ...tab, title: trimmed },
+        });
+      });
+    },
+    [updateFixedPanelTabsState],
+  );
+
   const clearActiveFileTabs = useCallback(() => {
     updateFixedPanelTabsState(clearActiveSecondaryFileTabInState);
   }, [updateFixedPanelTabsState]);
@@ -772,6 +790,7 @@ export function useThreadFileTabs({
     openTab,
     orderedSecondaryFileTabs,
     reopenClosedTab,
+    renamePluginPanelTab,
     reorderTab,
     selectFileSearchResult,
     updateBrowserTab,

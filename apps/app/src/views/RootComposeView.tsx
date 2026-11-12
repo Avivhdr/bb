@@ -59,6 +59,7 @@ import type {
   SecondaryPanelPaneRenderContext,
   SecondaryPanelRenderableTab,
 } from "@/components/secondary-panel/ThreadSecondaryPanel";
+import { panelTabRenameHandler } from "@/components/secondary-panel/secondaryPanelTab";
 import {
   LazyBrowserTabDeck,
   preloadThreadSecondaryPanel,
@@ -831,6 +832,7 @@ function RootComposeSurface({
     openPluginPanel,
     openTab,
     orderedSecondaryFileTabs,
+    renamePluginPanelTab,
     reopenClosedTab,
     reorderTab,
     selectFileSearchResult,
@@ -1242,10 +1244,12 @@ function RootComposeSurface({
             tab.kind === "terminal"
               ? () => terminals.close(tab.terminalId)
               : () => closeTab(tab.id),
+          onRename: panelTabRenameHandler(tab, renamePluginPanelTab),
         }),
       ),
     [
       closeTab,
+      renamePluginPanelTab,
       handleActivateFileTab,
       presentPanelTab,
       renderRootPanelTabContent,

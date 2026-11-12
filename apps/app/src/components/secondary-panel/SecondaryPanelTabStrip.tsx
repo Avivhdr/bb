@@ -2,6 +2,7 @@ import {
   type CSSProperties,
   type MouseEventHandler,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
@@ -39,6 +40,16 @@ import {
 } from "@bb/shared-ui/context-menu";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import {
+  useInlineRename,
+  useRenameController,
+  type InlineRenameArgs,
+  type RenameController,
+} from "@bb/shared-ui/inline-rename";
+import { InlineRenameEditor } from "@bb/shared-ui/inline-rename-editor";
+import { RenameSessionDialog } from "@bb/shared-ui/rename-session-dialog";
+import { COARSE_POINTER_TEXT_SM_CLASS } from "@bb/shared-ui/coarse-pointer-sizing";
+import { CONTEXT_SELECTION_SURFACE_CLASS } from "@bb/shared-ui/context-selection";
+import {
   OverflowFade,
   type OverflowFadeTone,
 } from "@bb/shared-ui/overflow-fade";
@@ -51,6 +62,7 @@ import {
 } from "@/lib/bb-desktop";
 import {
   PANEL_TAB_DRAG_DISTANCE_PX,
+  PANEL_TAB_RENAME_MAX_LENGTH,
   type SecondaryPanelRenderableTab,
   type SecondaryPanelTabReorderHandler,
 } from "./secondaryPanelTab";
@@ -121,6 +133,7 @@ interface SortablePanelTabProps {
   dragDisabled: boolean;
   noDragClass: string | null;
   onCloseTabs: (tabId: string, scope: SecondaryPanelTabCloseScope) => void;
+  renameController: RenameController;
   tabs: readonly SecondaryPanelRenderableTab[];
   onBeginTabDrag?: (
     tabId: string,
@@ -363,6 +376,7 @@ export function SecondaryPanelTabStrip({
   );
 
   const isCompactViewport = useIsCompactViewport();
+  const renameController = useRenameController();
   const handleCloseTabs = useCallback(
     (tabId: string, scope: SecondaryPanelTabCloseScope) => {
       const tabsToClose = secondaryPanelTabsToClose(tabs, tabId, scope);
@@ -406,6 +420,7 @@ export function SecondaryPanelTabStrip({
               noDragClass={noDragClass}
               onBeginTabDrag={onBeginTabDrag}
               onCloseTabs={handleCloseTabs}
+              renameController={renameController}
               tab={tab}
               tabs={tabs}
             />
@@ -436,6 +451,7 @@ export function SecondaryPanelTabStrip({
       noDragClass,
       onBeginTabDrag,
       handleCloseTabs,
+      renameController,
       draggingTab,
       activeTabId,
     ],
@@ -495,6 +511,7 @@ export function SecondaryPanelTabStrip({
         className={chevronNoDragClass}
         onClick={() => scrollByStep(1)}
       />
+      <RenameSessionDialog controller={renameController} />
     </div>
   );
 }
@@ -507,13 +524,31 @@ function SortablePanelTab({
   noDragClass,
   onBeginTabDrag,
   onCloseTabs,
+  renameController,
   tab,
   tabs,
 }: SortablePanelTabProps) {
+  const onRename = tab.onRename;
+  const renameArgs = useMemo<InlineRenameArgs>(
+    () => ({
+      kind: "tab",
+      id: tab.tab.id,
+      name: tab.label,
+      label: "Tab name",
+      maxLength: PANEL_TAB_RENAME_MAX_LENGTH,
+      onSave: async (name) => onRename?.(name),
+    }),
+    [onRename, tab.label, tab.tab.id],
+  );
+  const rename = useInlineRename(renameArgs, {
+    controller: renameController,
+    Editor: InlineRenameEditor,
+    fitEditorToContent: true,
+  });
   const { isDragging, listeners, setNodeRef, transform, transition } =
     useSortable({
       id: tab.tab.id,
-      disabled: dragDisabled,
+      disabled: dragDisabled || rename.isEditing,
     });
   const { onPointerDown: sortablePointerDown, ...sortableListeners } =
     listeners ?? {};
@@ -544,7 +579,10 @@ function SortablePanelTab({
 
   return (
     <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild disabled={contextMenuDisabled}>
+      <ContextMenuTrigger
+        asChild
+        disabled={contextMenuDisabled || rename.isEditing}
+      >
         <div
           ref={setTabRef}
           style={style}
@@ -558,12 +596,38 @@ function SortablePanelTab({
             onBeginTabDrag?.(tabId, event);
             sortablePointerDown?.(event);
           }}
+          onDoubleClick={
+            onRename === undefined
+              ? undefined
+              : (event) => {
+                  if (rename.startEditingFromDoubleClick()) {
+                    event.preventDefault();
+                  }
+                }
+          }
           {...sortableListeners}
         >
-          <PanelTab tab={tab} isActive={isActive} />
+          {rename.isEditing ? (
+            <RenamingPanelTab tab={tab} isActive={isActive}>
+              {rename.editor}
+            </RenamingPanelTab>
+          ) : (
+            <PanelTab tab={tab} isActive={isActive} />
+          )}
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent aria-label={`${tab.label} tab actions`}>
+      <ContextMenuContent
+        aria-label={`${tab.label} tab actions`}
+        onCloseAutoFocus={rename.onCloseAutoFocus}
+      >
+        {onRename === undefined ? null : (
+          <>
+            <ContextMenuItem onSelect={rename.startEditingFromMenu}>
+              Rename tab
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem
           disabled={!canCloseSelf}
           onSelect={() => onCloseTabs(tabId, "self")}
@@ -628,6 +692,34 @@ function TabStripScrollButton({
     >
       <Icon name={direction === "left" ? "ChevronLeft" : "ChevronRight"} />
     </Button>
+  );
+}
+
+function RenamingPanelTab({
+  tab,
+  isActive,
+  children,
+}: {
+  tab: SecondaryPanelRenderableTab;
+  isActive: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      data-tab-pill=""
+      className={cn(
+        "relative inline-flex h-7 shrink-0 items-center rounded-md pl-1.5 pr-2 max-md:pointer-coarse:h-9",
+        COARSE_POINTER_TEXT_SM_CLASS,
+        isActive
+          ? cn(CONTEXT_SELECTION_SURFACE_CLASS, "text-foreground")
+          : "text-muted-foreground",
+      )}
+    >
+      <span className="mr-1.5 inline-flex size-4 shrink-0 items-center justify-center [&_[data-icon-root]]:size-3.5">
+        {tab.leadingVisual}
+      </span>
+      <span className="flex min-w-16 max-w-[160px]">{children}</span>
+    </div>
   );
 }
 

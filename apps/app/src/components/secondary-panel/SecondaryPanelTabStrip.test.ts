@@ -340,3 +340,74 @@ describe("secondary panel tab close menu", () => {
     expect(closeCounts(tabs)).toEqual([1, 1, 1, 0]);
   });
 });
+
+function makeRenameMenuTabs(): SecondaryPanelTabStripProps["tabs"] {
+  const [first, second] = makeCloseMenuTabs();
+  return [
+    first!,
+    {
+      ...second!,
+      label: "Side chat",
+      onRename: vi.fn(),
+      tab: {
+        actionId: "side-chat",
+        id: "tab-side-chat",
+        kind: "plugin-panel" as const,
+        paramsJson: null,
+        pluginId: "side-chat",
+        title: "Side chat",
+      },
+    },
+  ];
+}
+
+describe("secondary panel tab rename", () => {
+  it("offers Rename tab only for tabs that can be renamed", () => {
+    renderCloseMenuStrip(makeRenameMenuTabs());
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "file-0.ts" }));
+    expect(screen.queryByRole("menuitem", { name: "Rename tab" })).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Side chat" }));
+    expect(screen.getByRole("menuitem", { name: "Rename tab" })).toBeTruthy();
+  });
+
+  it("renames the tab from its menu", async () => {
+    const tabs = makeRenameMenuTabs();
+    renderCloseMenuStrip(tabs);
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Side chat" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename tab" }));
+    const input = await screen.findByRole("textbox", { name: "Tab name" });
+    fireEvent.change(input, { target: { value: "  Retry logic " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await vi.waitFor(() =>
+      expect(tabs[1]?.onRename).toHaveBeenCalledWith("Retry logic"),
+    );
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "Tab name" })).toBeNull(),
+    );
+  });
+
+  it("starts renaming on double-click and cancels on Escape", async () => {
+    const tabs = makeRenameMenuTabs();
+    renderCloseMenuStrip(tabs);
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "file-0.ts" }));
+    expect(screen.queryByRole("textbox", { name: "Tab name" })).toBeNull();
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Side chat" }));
+    const input = await screen.findByRole("textbox", { name: "Tab name" });
+    fireEvent.change(input, { target: { value: "Never saved" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "Tab name" })).toBeNull(),
+    );
+    expect(tabs[1]?.onRename).not.toHaveBeenCalled();
+  });
+});
