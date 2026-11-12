@@ -159,6 +159,7 @@ import type {
   SecondaryPanelFixedTab,
   SecondaryPanelRenderableTab,
 } from "@/components/secondary-panel/ThreadSecondaryPanel";
+import { panelTabRenameHandler } from "@/components/secondary-panel/secondaryPanelTab";
 import { useThreadDetailThread } from "./useThreadDetailThread";
 import {
   buildTerminalSyncedSecondaryFileTabs,
@@ -381,6 +382,7 @@ function ThreadDetailViewInternal(
     openPluginDetail,
     openPluginPanel,
     orderedSecondaryFileTabs,
+    renamePluginPanelTab,
     reopenClosedTab,
     reorderTab,
     selectFileSearchResult,
@@ -1550,6 +1552,7 @@ function ThreadDetailViewInternal(
         tab.kind === "terminal"
           ? () => terminals.close(tab.terminalId)
           : () => closeTab(tab.id),
+      onRename: panelTabRenameHandler(tab, renamePluginPanelTab),
     }));
   const threadDetailContent = (
     <MarkdownLocalFileContextMenuContext.Provider

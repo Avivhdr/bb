@@ -12,7 +12,7 @@ import { useIsCompactViewport } from "./hooks/use-compact-viewport";
 import { usePointerCoarse } from "./hooks/use-pointer-coarse";
 
 export interface InlineRenameArgs {
-  kind: "thread" | "project" | "section" | "environment" | "machine";
+  kind: "thread" | "project" | "section" | "environment" | "machine" | "tab";
   id: string;
   name: string;
   label: string;

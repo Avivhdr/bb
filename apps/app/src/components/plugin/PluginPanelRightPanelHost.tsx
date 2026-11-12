@@ -47,6 +47,7 @@ import type {
   SecondaryPanelFixedTab,
   SecondaryPanelRenderableTab,
 } from "@/components/secondary-panel/ThreadSecondaryPanel";
+import { panelTabRenameHandler } from "@/components/secondary-panel/secondaryPanelTab";
 import { useThreadFileTabs } from "@/components/secondary-panel/useThreadFileTabs";
 import {
   useCloseFixedSecondaryPanel,
@@ -323,6 +324,7 @@ export function PluginPanelRightPanelHost({
     openPluginDetail,
     openPluginPanel,
     orderedSecondaryFileTabs,
+    renamePluginPanelTab,
     reopenClosedTab,
     reorderTab,
     updateBrowserTab,
@@ -799,12 +801,14 @@ export function PluginPanelRightPanelHost({
               tab.kind === "terminal"
                 ? () => terminals.close(tab.terminalId)
                 : () => closeTab(tab.id),
+            onRename: panelTabRenameHandler(tab, renamePluginPanelTab),
           },
         ];
       }),
     [
       activateTab,
       closeTab,
+      renamePluginPanelTab,
       orderedSecondaryFileTabs,
       presentPanelTab,
       renderPanelTabContent,

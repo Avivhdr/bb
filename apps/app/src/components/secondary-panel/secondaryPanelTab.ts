@@ -24,8 +24,21 @@ export interface SecondaryPanelRenderableTab {
   isPinned?: boolean;
   leadingVisual: ReactNode;
   onClose: () => void;
+  onRename?: (title: string) => void;
   onSelect: () => void;
   renderContent: (pane: SecondaryPanelPaneRenderContext) => ReactNode;
   statusLabel: string | null;
   tab: SecondaryFileFixedPanelTab;
+}
+
+export const PANEL_TAB_RENAME_MAX_LENGTH = 120;
+
+export function panelTabRenameHandler(
+  tab: SecondaryFileFixedPanelTab,
+  rename: (args: { tabId: string; title: string }) => void,
+): ((title: string) => void) | undefined {
+  if (tab.kind !== "plugin-panel" || tab.fileOpenerOwner !== undefined) {
+    return undefined;
+  }
+  return (title) => rename({ tabId: tab.id, title });
 }
